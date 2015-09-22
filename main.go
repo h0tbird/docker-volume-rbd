@@ -50,7 +50,8 @@ var (
 	defVolRoot = filepath.Join(dkvolume.DefaultDockerRootDirectory, id)
 
 	// Flags:
-	volRoot = flag.String("volroot", defVolRoot, "Docker volumes root directory")
+	volRoot     = flag.String("volroot", defVolRoot, "Docker volumes root directory")
+	defaultPool = flag.String("pool", "rbd", "Default Ceph Pool for RBD operations")
 )
 
 //-----------------------------------------------------------------------------
@@ -88,7 +89,10 @@ func usage() {
 func main() {
 
 	// Initialize the driver struct:
-	d := rbdDriver{}
+	d := rbdDriver{
+		volRoot:     *volRoot,
+		defaultPool: *defaultPool,
+	}
 
 	// Initializes the request handler with a driver implementation:
 	h := dkvolume.NewHandler(&d)
