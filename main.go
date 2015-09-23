@@ -50,8 +50,10 @@ var (
 	defVolRoot = filepath.Join(dkvolume.DefaultDockerRootDirectory, id)
 
 	// Flags:
-	volRoot     = flag.String("volroot", defVolRoot, "Docker volumes root directory")
-	defaultPool = flag.String("pool", "rbd", "Default Ceph Pool for RBD operations")
+	volRoot   = flag.String("volroot", defVolRoot, "Docker volumes root directory")
+	defPool   = flag.String("pool", "rbd", "Default Ceph pool for RBD operations")
+	defSize   = flag.Int("size", 2048, "Default block device image size")
+	defFsType = flag.String("fsType", "xfs", "Default file system type for new images")
 )
 
 //-----------------------------------------------------------------------------
@@ -90,8 +92,10 @@ func main() {
 
 	// Initialize the driver struct:
 	d := rbdDriver{
-		volRoot:     *volRoot,
-		defaultPool: *defaultPool,
+		volRoot:   *volRoot,
+		defPool:   *defPool,
+		defSize:   *defSize,
+		defFsType: *defFsType,
 	}
 
 	// Initializes the request handler with a driver implementation:

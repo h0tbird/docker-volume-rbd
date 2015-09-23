@@ -11,7 +11,10 @@ package main
 import (
 
 	// Standard library:
+	"errors"
 	"log"
+	"regexp"
+	"strconv"
 
 	// Community:
 	"github.com/calavera/dkvolume"
@@ -21,9 +24,17 @@ import (
 // Structs definitions:
 //-----------------------------------------------------------------------------
 
+type rbdImage struct {
+	size   int
+	fsType string
+}
+
 type rbdDriver struct {
-	volRoot     string
-	defaultPool string
+	volRoot   string
+	defPool   string
+	defSize   int
+	defFsType string
+	images    map[string]map[string]rbdImage
 }
 
 //-----------------------------------------------------------------------------
@@ -41,7 +52,14 @@ type rbdDriver struct {
 //-----------------------------------------------------------------------------
 
 func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
-	log.Printf("Create: %s", r.Name)
+
+	log.Printf("[POST] /VolumeDriver.Create")
+
+	// Parse the docker --volume option:
+	if err := d.parsePoolNameSize(r.Name); err != nil {
+		log.Printf("ERROR: parsing volume: %s", err)
+	}
+
 	return dkvolume.Response{}
 }
 
@@ -117,4 +135,47 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 func (d *rbdDriver) Unmount(r dkvolume.Request) dkvolume.Response {
 	log.Printf("Umount: %s", r.Name)
 	return dkvolume.Response{}
+}
+
+//-----------------------------------------------------------------------------
+// parsePoolNameSize
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) parsePoolNameSize(src string) error {
+
+	img := new(rbdImage)
+	reg := regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
+	sub := reg.FindStringSubmatch(src)
+
+	if len(sub) != 6 {
+		return errors.New("Unable to parse docker --volume option: %s" + src)
+	}
+
+	// Default pool:
+	pool := d.defPool
+	if sub[2] != "" {
+		pool = sub[2]
+	}
+
+	// Name:
+	name := sub[3]
+
+	// Default size:
+	img.size = d.defSize
+	if sub[5] != "" {
+		img.size, _ = strconv.Atoi(sub[5])
+	}
+
+	// Default fsType:
+	img.fsType = d.defFsType
+
+	// Save:
+	if d.images[pool] == nil {
+		d.images[pool] = make(map[string]rbdImage)
+	}
+
+	d.images[pool][name] = *img
+
+	// Return on success:
+	return nil
 }
