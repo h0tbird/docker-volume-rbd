@@ -13,6 +13,7 @@ import (
 	// Standard library:
 	"errors"
 	"log"
+	"path/filepath"
 	"regexp"
 	"strconv"
 
@@ -21,20 +22,20 @@ import (
 )
 
 //-----------------------------------------------------------------------------
-// Structs definitions:
+// Package variable declarations:
 //-----------------------------------------------------------------------------
 
-type rbdImage struct {
-	size   int
-	fsType string
-}
+var nameRegex = regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
+
+//-----------------------------------------------------------------------------
+// Structs definitions:
+//-----------------------------------------------------------------------------
 
 type rbdDriver struct {
 	volRoot   string
 	defPool   string
 	defSize   int
 	defFsType string
-	images    map[string]map[string]rbdImage
 }
 
 //-----------------------------------------------------------------------------
@@ -56,9 +57,16 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 	log.Printf("[POST] /VolumeDriver.Create")
 
 	// Parse the docker --volume option:
-	if err := d.parsePoolNameSize(r.Name); err != nil {
+	pool, name, size, err := d.parsePoolNameSize(r.Name)
+	if err != nil {
 		log.Printf("ERROR: parsing volume: %s", err)
+		return dkvolume.Response{Err: err.Error()}
 	}
+
+	mountpoint := filepath.Join(d.volRoot, pool, name)
+
+	log.Printf("Pool: %s Name: %s Size: %d", pool, name, size)
+	log.Printf("Mountpoint: %s", mountpoint)
 
 	return dkvolume.Response{}
 }
@@ -141,41 +149,33 @@ func (d *rbdDriver) Unmount(r dkvolume.Request) dkvolume.Response {
 // parsePoolNameSize
 //-----------------------------------------------------------------------------
 
-func (d *rbdDriver) parsePoolNameSize(src string) error {
+func (d *rbdDriver) parsePoolNameSize(src string) (string, string, int, error) {
 
-	img := new(rbdImage)
-	reg := regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
-	sub := reg.FindStringSubmatch(src)
+	sub := nameRegex.FindStringSubmatch(src)
 
 	if len(sub) != 6 {
-		return errors.New("Unable to parse docker --volume option: %s" + src)
+		return "", "", 0, errors.New("Unable to parse docker --volume option: %s" + src)
 	}
 
-	// Default pool:
+	// Set defaults:
 	pool := d.defPool
+	name := sub[3]
+	size := d.defSize
+
+	// Pool overwrite:
 	if sub[2] != "" {
 		pool = sub[2]
 	}
 
-	// Name:
-	name := sub[3]
-
-	// Default size:
-	img.size = d.defSize
+	// Size overwrite:
 	if sub[5] != "" {
-		img.size, _ = strconv.Atoi(sub[5])
+		var err error
+		size, err = strconv.Atoi(sub[5])
+		if err != nil {
+			size = d.defSize
+		}
 	}
-
-	// Default fsType:
-	img.fsType = d.defFsType
-
-	// Save:
-	if d.images[pool] == nil {
-		d.images[pool] = make(map[string]rbdImage)
-	}
-
-	d.images[pool][name] = *img
 
 	// Return on success:
-	return nil
+	return pool, name, size, nil
 }

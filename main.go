@@ -103,5 +103,5 @@ func main() {
 
 	// Listen for requests in a unix socket:
 	log.Printf("Listening on %s\n", socketAddress)
-	fmt.Println(h.ServeUnix("root", socketAddress))
+	fmt.Println(h.ServeUnix("", socketAddress))
 }
