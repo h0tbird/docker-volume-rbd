@@ -13,9 +13,11 @@ import (
 	// Standard library:
 	"errors"
 	"log"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"strings"
 
 	// Community:
 	"github.com/calavera/dkvolume"
@@ -25,7 +27,10 @@ import (
 // Package variable declarations:
 //-----------------------------------------------------------------------------
 
-var nameRegex = regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
+var (
+	nameRegex = regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
+	cmds      = [...]string{"rbd", "mkfs"}
+)
 
 //-----------------------------------------------------------------------------
 // Structs definitions:
@@ -34,8 +39,39 @@ var nameRegex = regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0
 type rbdDriver struct {
 	volRoot   string
 	defPool   string
-	defSize   int
 	defFsType string
+	defSize   int
+	cmd       map[string]string
+}
+
+//-----------------------------------------------------------------------------
+// initDriver
+//-----------------------------------------------------------------------------
+
+func initDriver(volRoot, defPool, defFsType string, defSize int) rbdDriver {
+
+	// Variables
+	var err error
+	cmd := make(map[string]string)
+
+	// Search for binaries
+	for _, i := range cmds {
+		cmd[i], err = exec.LookPath(i)
+		if err != nil {
+			log.Fatal("Make sure binary %s is in your PATH", i)
+		}
+	}
+
+	// Initialize the struct
+	driver := rbdDriver{
+		volRoot:   volRoot,
+		defPool:   defPool,
+		defFsType: defFsType,
+		defSize:   defSize,
+		cmd:       cmd,
+	}
+
+	return driver
 }
 
 //-----------------------------------------------------------------------------
@@ -56,7 +92,7 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 
 	log.Printf("[POST] /VolumeDriver.Create")
 
-	// Parse the docker --volume option:
+	// Parse the docker --volume option
 	pool, name, size, err := d.parsePoolNameSize(r.Name)
 	if err != nil {
 		log.Printf("ERROR: parsing volume: %s", err)
@@ -65,7 +101,17 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 
 	mountpoint := filepath.Join(d.volRoot, pool, name)
 
-	log.Printf("Pool: %s Name: %s Size: %d", pool, name, size)
+	// Create RBD image if not exist
+	if exists, err := d.imageExists(pool, name); !exists && err == nil {
+		log.Printf("Image not found, creating it now...")
+		if err = d.createImage(pool, name, d.defFsType, size); err != nil {
+			return dkvolume.Response{Err: err.Error()}
+		}
+	} else if err != nil {
+		log.Printf("ERROR: checking for RBD Image: %s", err)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
 	log.Printf("Mountpoint: %s", mountpoint)
 
 	return dkvolume.Response{}
@@ -157,17 +203,17 @@ func (d *rbdDriver) parsePoolNameSize(src string) (string, string, int, error) {
 		return "", "", 0, errors.New("Unable to parse docker --volume option: %s" + src)
 	}
 
-	// Set defaults:
+	// Set defaults
 	pool := d.defPool
 	name := sub[3]
 	size := d.defSize
 
-	// Pool overwrite:
+	// Pool overwrite
 	if sub[2] != "" {
 		pool = sub[2]
 	}
 
-	// Size overwrite:
+	// Size overwrite
 	if sub[5] != "" {
 		var err error
 		size, err = strconv.Atoi(sub[5])
@@ -176,6 +222,49 @@ func (d *rbdDriver) parsePoolNameSize(src string) (string, string, int, error) {
 		}
 	}
 
-	// Return on success:
 	return pool, name, size, nil
+}
+
+//-----------------------------------------------------------------------------
+// imageExists
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) imageExists(pool, name string) (bool, error) {
+
+	// List RBD images
+	out, err := exec.Command(d.cmd["rbd"], "ls", pool).Output()
+	if err != nil {
+		return false, err
+	}
+
+	// Parse the output
+	list := strings.Split(string(out), "\n")
+	for _, item := range list {
+		if item == name {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+//-----------------------------------------------------------------------------
+// createImage
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) createImage(pool, name, fstype string, size int) error {
+
+	// Create the block device
+	err := exec.Command(
+		d.cmd["rbd"], "create",
+		"--pool", pool,
+		"--size", strconv.Itoa(size),
+		name,
+	).Run()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

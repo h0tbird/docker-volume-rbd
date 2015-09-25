@@ -90,15 +90,8 @@ func usage() {
 
 func main() {
 
-	// Initialize the driver struct:
-	d := rbdDriver{
-		volRoot:   *volRoot,
-		defPool:   *defPool,
-		defSize:   *defSize,
-		defFsType: *defFsType,
-	}
-
-	// Initializes the request handler with a driver implementation:
+	// Request handler with a driver implementation
+	d := initDriver(*volRoot, *defPool, *defFsType, *defSize)
 	h := dkvolume.NewHandler(&d)
 
 	// Listen for requests in a unix socket:
