@@ -24,12 +24,20 @@ import (
 )
 
 //-----------------------------------------------------------------------------
-// Package variable declarations:
+// Package constant declarations factored into a block:
+//-----------------------------------------------------------------------------
+
+const (
+	lockID = "dockerLock"
+)
+
+//-----------------------------------------------------------------------------
+// Package variable declarations factored into a block:
 //-----------------------------------------------------------------------------
 
 var (
 	nameRegex = regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
-	cmds      = [...]string{"rbd", "mkfs"}
+	commands  = [...]string{"rbd", "mkfs"}
 )
 
 //-----------------------------------------------------------------------------
@@ -55,7 +63,7 @@ func initDriver(volRoot, defPool, defFsType string, defSize int) rbdDriver {
 	cmd := make(map[string]string)
 
 	// Search for binaries
-	for _, i := range cmds {
+	for _, i := range commands {
 		cmd[i], err = exec.LookPath(i)
 		if err != nil {
 			log.Fatal("Make sure binary %s is in your PATH", i)
@@ -254,7 +262,7 @@ func (d *rbdDriver) imageExists(pool, name string) (bool, error) {
 
 func (d *rbdDriver) createImage(pool, name, fstype string, size int) error {
 
-	// Create the block device
+	// Create the image device
 	err := exec.Command(
 		d.cmd["rbd"], "create",
 		"--pool", pool,
@@ -265,6 +273,52 @@ func (d *rbdDriver) createImage(pool, name, fstype string, size int) error {
 	if err != nil {
 		return err
 	}
+
+	// Add image lock
+	locker, err := d.lockImage(pool, name, lockID)
+	if err != nil {
+		return err
+	}
+
+	// Remove image lock
+	err = d.unlockImage(pool, name, lockID, locker)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+//-----------------------------------------------------------------------------
+// lockImage
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) lockImage(pool, name, lockID string) (string, error) {
+
+	// Lock the image
+	err := exec.Command(
+		d.cmd["rbd"], "lock add",
+		"--pool", pool,
+		name, lockID,
+	).Run()
+
+	if err != nil {
+		return "", err
+	}
+
+	// List the locks
+	//out, err := exec.Command(
+	//	d.cmd["rbd"], "lock list",
+	//)
+
+	return "", nil
+}
+
+//-----------------------------------------------------------------------------
+// unlockImage
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) unlockImage(pool, name, lockID, locker string) error {
 
 	return nil
 }
