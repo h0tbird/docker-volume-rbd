@@ -113,14 +113,14 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 	// Parse the docker --volume option
 	pool, name, size, err := d.parsePoolNameSize(r.Name)
 	if err != nil {
-		log.Printf("ERROR: parsing volume: %s", err)
+		log.Printf("[Create] ERROR parsing volume: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
 	// Check if volume already exists
 	mountpoint := filepath.Join(d.volRoot, pool, name)
 	if _, found := d.volumes[mountpoint]; found {
-		log.Println("INFO: Volume is already in known mounts: " + mountpoint)
+		log.Println("[Create] INFO Volume is already in known mounts: " + mountpoint)
 		return dkvolume.Response{}
 	}
 
@@ -130,7 +130,7 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 			return dkvolume.Response{Err: err.Error()}
 		}
 	} else if err != nil {
-		log.Printf("ERROR: checking for RBD Image: %s", err)
+		log.Printf("[Create] ERROR checking for RBD Image: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
@@ -173,7 +173,7 @@ func (d *rbdDriver) Path(r dkvolume.Request) dkvolume.Response {
 	// Parse the docker --volume option
 	pool, name, _, err := d.parsePoolNameSize(r.Name)
 	if err != nil {
-		log.Printf("ERROR: parsing volume: %s", err)
+		log.Printf("[Path] ERROR parsing volume: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
