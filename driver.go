@@ -39,12 +39,20 @@ const (
 var (
 	nameRegex = regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
 	lockRegex = regexp.MustCompile(`^(client.[0-9]+) ` + lockID)
-	commands  = [...]string{"rbd", "mount"}
+	commands  = [...]string{"rbd", "mount", "umount"}
 )
 
 //-----------------------------------------------------------------------------
 // Structs definitions:
 //-----------------------------------------------------------------------------
+
+type volume struct {
+	name   string
+	device string
+	locker string
+	fstype string
+	pool   string
+}
 
 type rbdDriver struct {
 	volRoot   string
@@ -52,6 +60,7 @@ type rbdDriver struct {
 	defFsType string
 	defSize   int
 	cmd       map[string]string
+	volumes   map[string]*volume
 }
 
 //-----------------------------------------------------------------------------
@@ -79,6 +88,7 @@ func initDriver(volRoot, defPool, defFsType string, defSize int) rbdDriver {
 		defFsType: defFsType,
 		defSize:   defSize,
 		cmd:       cmd,
+		volumes:   map[string]*volume{},
 	}
 
 	return driver
@@ -100,8 +110,6 @@ func initDriver(volRoot, defPool, defFsType string, defSize int) rbdDriver {
 
 func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 
-	log.Printf("CREATE")
-
 	// Parse the docker --volume option
 	pool, name, size, err := d.parsePoolNameSize(r.Name)
 	if err != nil {
@@ -109,7 +117,14 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 		return dkvolume.Response{Err: err.Error()}
 	}
 
-	// Create RBD image if not exist
+	// Check if volume already exists
+	mountpoint := filepath.Join(d.volRoot, pool, name)
+	if _, found := d.volumes[mountpoint]; found {
+		log.Println("INFO: Volume is already in known mounts: " + mountpoint)
+		return dkvolume.Response{}
+	}
+
+	// Create RBD image if not exists
 	if exists, err := d.imageExists(pool, name); !exists && err == nil {
 		if err = d.createImage(pool, name, d.defFsType, size); err != nil {
 			return dkvolume.Response{Err: err.Error()}
@@ -155,8 +170,6 @@ func (d *rbdDriver) Remove(r dkvolume.Request) dkvolume.Response {
 
 func (d *rbdDriver) Path(r dkvolume.Request) dkvolume.Response {
 
-	log.Printf("PATH")
-
 	// Parse the docker --volume option
 	pool, name, _, err := d.parsePoolNameSize(r.Name)
 	if err != nil {
@@ -184,18 +197,17 @@ func (d *rbdDriver) Path(r dkvolume.Request) dkvolume.Response {
 
 func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 
-	log.Printf("MOUNT")
-
 	// Parse the docker --volume option
 	pool, name, _, err := d.parsePoolNameSize(r.Name)
 	if err != nil {
-		log.Printf("ERROR: parsing volume: %s", err)
+		log.Printf("[Mount] ERROR: parsing volume: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
 	// Add image lock
 	locker, err := d.lockImage(pool, name, lockID)
 	if err != nil {
+		log.Printf("[Mount] ERROR locking image: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
@@ -203,6 +215,7 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 	device, err := d.mapImage(pool, name)
 	if err != nil {
 		defer d.unlockImage(pool, name, lockID, locker)
+		log.Printf("[Mount] ERROR mapping image: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
@@ -212,6 +225,7 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 	if err != nil {
 		defer d.unmapImage(device)
 		defer d.unlockImage(pool, name, lockID, locker)
+		log.Printf("[Mount] ERROR creating mount point: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
@@ -219,7 +233,17 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 	if err = d.mountDevice(device, mountpoint, d.defFsType); err != nil {
 		defer d.unmapImage(device)
 		defer d.unlockImage(pool, name, lockID, locker)
+		log.Printf("[Mount] ERROR mounting device: %s", err)
 		return dkvolume.Response{Err: err.Error()}
+	}
+
+	// Add to list of volumes
+	d.volumes[mountpoint] = &volume{
+		name:   name,
+		device: device,
+		locker: locker,
+		fstype: d.defFsType,
+		pool:   pool,
 	}
 
 	return dkvolume.Response{Mountpoint: mountpoint}
@@ -241,8 +265,42 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 
 func (d *rbdDriver) Unmount(r dkvolume.Request) dkvolume.Response {
 
-	log.Printf("UMOUNT")
+	// Parse the docker --volume option
+	pool, name, _, err := d.parsePoolNameSize(r.Name)
+	if err != nil {
+		log.Printf("[Unmount] ERROR parsing volume: %s", err)
+		return dkvolume.Response{Err: err.Error()}
+	}
 
+	// Retrieve volume state
+	mountpoint := filepath.Join(d.volRoot, pool, name)
+	vol, found := d.volumes[mountpoint]
+	if !found {
+		err = errors.New("No state found")
+		log.Printf("[Unmount] ERROR retrieving state: %s", err)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	// Unmount the device
+	if err := d.unmountDevice(vol.device); err != nil {
+		log.Printf("[Unmount] ERROR unmounting device: %s", err)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	// Unmap the image
+	if err = d.unmapImage(vol.device); err != nil {
+		log.Printf("[Unmount] ERROR unmapping image: %s", err)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	// Unlock the image
+	if err = d.unlockImage(vol.pool, vol.name, lockID, vol.locker); err != nil {
+		log.Printf("[Unmount] ERROR unlocking image: %s", err)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	// Forget the volume
+	delete(d.volumes, mountpoint)
 	return dkvolume.Response{}
 }
 
@@ -497,6 +555,11 @@ func (d *rbdDriver) mountDevice(device, mountpoint, fsType string) error {
 //-----------------------------------------------------------------------------
 
 func (d *rbdDriver) unmountDevice(device string) error {
+
+	// Unmount the device
+	if err := exec.Command(d.cmd["umount"], device).Run(); err != nil {
+		return errors.New("Unable to umount " + device)
+	}
 
 	return nil
 }
