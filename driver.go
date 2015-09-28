@@ -37,6 +37,7 @@ const (
 
 var (
 	nameRegex = regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
+	lockRegex = regexp.MustCompile(`^(client.[0-9]+) ` + lockID)
 	commands  = [...]string{"rbd", "mkfs"}
 )
 
@@ -98,8 +99,6 @@ func initDriver(volRoot, defPool, defFsType string, defSize int) rbdDriver {
 
 func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 
-	log.Printf("[POST] /VolumeDriver.Create")
-
 	// Parse the docker --volume option
 	pool, name, size, err := d.parsePoolNameSize(r.Name)
 	if err != nil {
@@ -111,7 +110,6 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 
 	// Create RBD image if not exist
 	if exists, err := d.imageExists(pool, name); !exists && err == nil {
-		log.Printf("Image not found, creating it now...")
 		if err = d.createImage(pool, name, d.defFsType, size); err != nil {
 			return dkvolume.Response{Err: err.Error()}
 		}
@@ -242,7 +240,7 @@ func (d *rbdDriver) imageExists(pool, name string) (bool, error) {
 	// List RBD images
 	out, err := exec.Command(d.cmd["rbd"], "ls", pool).Output()
 	if err != nil {
-		return false, err
+		return false, errors.New("Unable to list images")
 	}
 
 	// Parse the output
@@ -271,7 +269,7 @@ func (d *rbdDriver) createImage(pool, name, fstype string, size int) error {
 	).Run()
 
 	if err != nil {
-		return err
+		return errors.New("Unable to create the image device")
 	}
 
 	// Add image lock
@@ -303,15 +301,31 @@ func (d *rbdDriver) lockImage(pool, name, lockID string) (string, error) {
 	).Run()
 
 	if err != nil {
-		return "", err
+		return "", errors.New("Unable to lock the image")
 	}
 
 	// List the locks
-	//out, err := exec.Command(
-	//	d.cmd["rbd"], "lock list",
-	//)
+	out, err := exec.Command(
+		d.cmd["rbd"], "lock list",
+		"--pool", pool, name,
+	).Output()
 
-	return "", nil
+	if err != nil {
+		return "", errors.New("Unable to list the image locks")
+	}
+
+	// Parse the locker ID
+	lines := strings.Split(string(out), "\n")
+	if len(lines) > 1 {
+		for _, line := range lines[1:] {
+			sub := lockRegex.FindStringSubmatch(line)
+			if len(sub) == 2 {
+				return sub[1], nil
+			}
+		}
+	}
+
+	return "", errors.New("Unable to parse locker ID")
 }
 
 //-----------------------------------------------------------------------------
@@ -319,6 +333,16 @@ func (d *rbdDriver) lockImage(pool, name, lockID string) (string, error) {
 //-----------------------------------------------------------------------------
 
 func (d *rbdDriver) unlockImage(pool, name, lockID, locker string) error {
+
+	// Unlock the image
+	err := exec.Command(
+		d.cmd["rbd"], "lock remove",
+		name, lockID, locker,
+	).Run()
+
+	if err != nil {
+		return errors.New("Unable to unlock the image")
+	}
 
 	return nil
 }
