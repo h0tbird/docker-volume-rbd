@@ -13,6 +13,7 @@ import (
 	// Standard library:
 	"errors"
 	"log"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -38,7 +39,7 @@ const (
 var (
 	nameRegex = regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
 	lockRegex = regexp.MustCompile(`^(client.[0-9]+) ` + lockID)
-	commands  = [...]string{"rbd", "mkfs"}
+	commands  = [...]string{"rbd", "mount"}
 )
 
 //-----------------------------------------------------------------------------
@@ -99,14 +100,14 @@ func initDriver(volRoot, defPool, defFsType string, defSize int) rbdDriver {
 
 func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 
+	log.Printf("CREATE")
+
 	// Parse the docker --volume option
 	pool, name, size, err := d.parsePoolNameSize(r.Name)
 	if err != nil {
 		log.Printf("ERROR: parsing volume: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
-
-	mountpoint := filepath.Join(d.volRoot, pool, name)
 
 	// Create RBD image if not exist
 	if exists, err := d.imageExists(pool, name); !exists && err == nil {
@@ -117,8 +118,6 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 		log.Printf("ERROR: checking for RBD Image: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
-
-	log.Printf("Mountpoint: %s", mountpoint)
 
 	return dkvolume.Response{}
 }
@@ -137,7 +136,7 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 //-----------------------------------------------------------------------------
 
 func (d *rbdDriver) Remove(r dkvolume.Request) dkvolume.Response {
-	log.Printf("Remove: %s", r.Name)
+	log.Printf("REMOVE: %s", r.Name)
 	return dkvolume.Response{}
 }
 
@@ -155,8 +154,18 @@ func (d *rbdDriver) Remove(r dkvolume.Request) dkvolume.Response {
 //-----------------------------------------------------------------------------
 
 func (d *rbdDriver) Path(r dkvolume.Request) dkvolume.Response {
-	log.Printf("Path: %s", r.Name)
-	return dkvolume.Response{Mountpoint: "/path/to/directory/on/host"}
+
+	log.Printf("PATH")
+
+	// Parse the docker --volume option
+	pool, name, _, err := d.parsePoolNameSize(r.Name)
+	if err != nil {
+		log.Printf("ERROR: parsing volume: %s", err)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	mountpoint := filepath.Join(d.volRoot, pool, name)
+	return dkvolume.Response{Mountpoint: mountpoint}
 }
 
 //-----------------------------------------------------------------------------
@@ -174,8 +183,46 @@ func (d *rbdDriver) Path(r dkvolume.Request) dkvolume.Response {
 //-----------------------------------------------------------------------------
 
 func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
-	log.Printf("Mount: %s", r.Name)
-	return dkvolume.Response{Mountpoint: "/path/to/directory/on/host"}
+
+	log.Printf("MOUNT")
+
+	// Parse the docker --volume option
+	pool, name, _, err := d.parsePoolNameSize(r.Name)
+	if err != nil {
+		log.Printf("ERROR: parsing volume: %s", err)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	// Add image lock
+	locker, err := d.lockImage(pool, name, lockID)
+	if err != nil {
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	// Map the image to a kernel device
+	device, err := d.mapImage(pool, name)
+	if err != nil {
+		defer d.unlockImage(pool, name, lockID, locker)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	// Create mountpoint
+	mountpoint := filepath.Join(d.volRoot, pool, name)
+	err = os.MkdirAll(mountpoint, os.ModeDir|os.FileMode(int(0775)))
+	if err != nil {
+		defer d.unmapImage(device)
+		defer d.unlockImage(pool, name, lockID, locker)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	// Mount the device
+	if err = d.mountDevice(device, mountpoint, d.defFsType); err != nil {
+		defer d.unmapImage(device)
+		defer d.unlockImage(pool, name, lockID, locker)
+		return dkvolume.Response{Err: err.Error()}
+	}
+
+	return dkvolume.Response{Mountpoint: mountpoint}
 }
 
 //-----------------------------------------------------------------------------
@@ -193,7 +240,9 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 //-----------------------------------------------------------------------------
 
 func (d *rbdDriver) Unmount(r dkvolume.Request) dkvolume.Response {
-	log.Printf("Umount: %s", r.Name)
+
+	log.Printf("UMOUNT")
+
 	return dkvolume.Response{}
 }
 
@@ -419,6 +468,35 @@ func (d *rbdDriver) makeFs(device, fsType string) error {
 	if err = exec.Command(mkfs, device).Run(); err != nil {
 		return errors.New("Unable to make file system on " + device)
 	}
+
+	return nil
+}
+
+//-----------------------------------------------------------------------------
+// mountDevice
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) mountDevice(device, mountpoint, fsType string) error {
+
+	// Mount the device
+	err := exec.Command(
+		d.cmd["mount"],
+		"-t", fsType,
+		device, mountpoint,
+	).Run()
+
+	if err != nil {
+		return errors.New("Unable to mount " + device + "on " + mountpoint)
+	}
+
+	return nil
+}
+
+//-----------------------------------------------------------------------------
+// unmountDevice
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) unmountDevice(device string) error {
 
 	return nil
 }
