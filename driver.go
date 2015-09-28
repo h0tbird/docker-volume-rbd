@@ -285,11 +285,20 @@ func (d *rbdDriver) createImage(pool, name, fstype string, size int) error {
 		return err
 	}
 
-	log.Printf("Device: %s", device)
+	// Make the filesystem
+	if err = d.makeFs(device, d.defFsType); err != nil {
+		defer d.unmapImage(device)
+		defer d.unlockImage(pool, name, lockID, locker)
+		return err
+	}
+
+	// Unmap the image from kernel device
+	if err = d.unmapImage(device); err != nil {
+		return err
+	}
 
 	// Remove image lock
-	err = d.unlockImage(pool, name, lockID, locker)
-	if err != nil {
+	if err = d.unlockImage(pool, name, lockID, locker); err != nil {
 		return err
 	}
 
@@ -373,7 +382,7 @@ func (d *rbdDriver) mapImage(pool, name string) (string, error) {
 	}
 
 	// Parse the device
-	return string(out), nil
+	return strings.TrimSpace(string(out)), nil
 }
 
 //-----------------------------------------------------------------------------
@@ -389,6 +398,26 @@ func (d *rbdDriver) unmapImage(device string) error {
 
 	if err != nil {
 		return errors.New("Unable to unmap the image from " + device)
+	}
+
+	return nil
+}
+
+//-----------------------------------------------------------------------------
+// makeFs
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) makeFs(device, fsType string) error {
+
+	// Search for mkfs
+	mkfs, err := exec.LookPath("mkfs." + d.defFsType)
+	if err != nil {
+		return errors.New("Unable to find mkfs." + d.defFsType)
+	}
+
+	// Make the file system
+	if err = exec.Command(mkfs, device).Run(); err != nil {
+		return errors.New("Unable to make file system on " + device)
 	}
 
 	return nil
