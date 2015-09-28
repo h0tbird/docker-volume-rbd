@@ -278,6 +278,15 @@ func (d *rbdDriver) createImage(pool, name, fstype string, size int) error {
 		return err
 	}
 
+	// Map the image to a kernel device
+	device, err := d.mapImage(pool, name)
+	if err != nil {
+		defer d.unlockImage(pool, name, lockID, locker)
+		return err
+	}
+
+	log.Printf("Device: %s", device)
+
 	// Remove image lock
 	err = d.unlockImage(pool, name, lockID, locker)
 	if err != nil {
@@ -342,6 +351,44 @@ func (d *rbdDriver) unlockImage(pool, name, lockID, locker string) error {
 
 	if err != nil {
 		return errors.New("Unable to unlock the image")
+	}
+
+	return nil
+}
+
+//-----------------------------------------------------------------------------
+// mapImage
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) mapImage(pool, name string) (string, error) {
+
+	// Map the image to a kernel device
+	out, err := exec.Command(
+		d.cmd["rbd"], "map",
+		"--pool", pool, name,
+	).Output()
+
+	if err != nil {
+		return "", errors.New("Unable to map the image to a kernel device")
+	}
+
+	// Parse the device
+	return string(out), nil
+}
+
+//-----------------------------------------------------------------------------
+// unmapImage
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) unmapImage(device string) error {
+
+	// Unmap the image from a kernel device
+	err := exec.Command(
+		d.cmd["rbd"], "unmap", device,
+	).Run()
+
+	if err != nil {
+		return errors.New("Unable to unmap the image from " + device)
 	}
 
 	return nil
