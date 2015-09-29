@@ -129,6 +129,7 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 
 	// Create RBD image if not exists
 	if exists, err := d.imageExists(pool, name); !exists && err == nil {
+		log.Println("[Create] INFO Image does not exists. Creating it now...")
 		if err = d.createImage(pool, name, d.defFsType, size); err != nil {
 			return dkvolume.Response{Err: err.Error()}
 		}
@@ -202,11 +203,12 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 	// Parse the docker --volume option
 	pool, name, _, err := d.parsePoolNameSize(r.Name)
 	if err != nil {
-		log.Printf("[Mount] ERROR: parsing volume: %s", err)
+		log.Printf("[Mount] ERROR parsing volume: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
 	// Add image lock
+	log.Printf("[Mount] INFO locking image %s", name)
 	locker, err := d.lockImage(pool, name, lockID)
 	if err != nil {
 		log.Printf("[Mount] ERROR locking image: %s", err)
@@ -214,6 +216,7 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 	}
 
 	// Map the image to a kernel device
+	log.Printf("[Mount] INFO mapping image %s", name)
 	device, err := d.mapImage(pool, name)
 	if err != nil {
 		defer d.unlockImage(pool, name, lockID, locker)
@@ -223,6 +226,7 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 
 	// Create mountpoint
 	mountpoint := filepath.Join(d.volRoot, pool, name)
+	log.Printf("[Mount] INFO creating %s", mountpoint)
 	err = os.MkdirAll(mountpoint, os.ModeDir|os.FileMode(int(0775)))
 	if err != nil {
 		defer d.unmapImage(device)
@@ -232,6 +236,7 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 	}
 
 	// Mount the device
+	log.Printf("[Mount] INFO mounting device %s", device)
 	if err = d.mountDevice(device, mountpoint, d.defFsType); err != nil {
 		defer d.unmapImage(device)
 		defer d.unlockImage(pool, name, lockID, locker)
@@ -284,18 +289,21 @@ func (d *rbdDriver) Unmount(r dkvolume.Request) dkvolume.Response {
 	}
 
 	// Unmount the device
+	log.Printf("[Unmount] INFO unmounting device %s", vol.device)
 	if err := d.unmountDevice(vol.device); err != nil {
 		log.Printf("[Unmount] ERROR unmounting device: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
 	// Unmap the image
+	log.Printf("[Unmount] INFO unmapping image %s", name)
 	if err = d.unmapImage(vol.device); err != nil {
 		log.Printf("[Unmount] ERROR unmapping image: %s", err)
 		return dkvolume.Response{Err: err.Error()}
 	}
 
 	// Unlock the image
+	log.Printf("[Unmount] INFO unlocking image %s", name)
 	if err = d.unlockImage(vol.pool, vol.name, lockID, vol.locker); err != nil {
 		log.Printf("[Unmount] ERROR unlocking image: %s", err)
 		return dkvolume.Response{Err: err.Error()}
