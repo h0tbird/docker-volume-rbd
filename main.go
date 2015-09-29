@@ -91,11 +91,11 @@ func usage() {
 func main() {
 
 	// Request handler with a driver implementation
-	log.Printf("[Init] INFO Volume root is %s\n", *volRoot)
+	log.Printf("[Init] INFO volume root is %s\n", *volRoot)
 	d := initDriver(*volRoot, *defPool, *defFsType, *defSize)
 	h := dkvolume.NewHandler(&d)
 
 	// Listen for requests in a unix socket:
-	log.Printf("[Init] INFO Listening on %s\n", socket)
+	log.Printf("[Init] INFO listening on %s\n", socket)
 	fmt.Println(h.ServeUnix("", socket))
 }

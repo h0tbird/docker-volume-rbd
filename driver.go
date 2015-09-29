@@ -75,13 +75,14 @@ func initDriver(volRoot, defPool, defFsType string, defSize int) rbdDriver {
 	for _, i := range commands {
 		cmd[i], err = exec.LookPath(i)
 		if err != nil {
-			log.Fatal("[Init] ERROR Make sure binary %s is in your PATH", i)
+			log.Fatal("[Init] ERROR make sure binary %s is in your PATH", i)
 		}
 	}
 
 	// Load RBD kernel module
+	log.Printf("[Init] INFO loading RBD kernel module...")
 	if err = exec.Command(cmd["modprobe"], "rbd").Run(); err != nil {
-		log.Fatal("[Init] ERROR Unable to load RBD kernel module")
+		log.Fatal("[Init] ERROR unable to load RBD kernel module")
 	}
 
 	// Initialize the struct
@@ -123,13 +124,13 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 	// Check if volume already exists
 	mountpoint := filepath.Join(d.volRoot, pool, name)
 	if _, found := d.volumes[mountpoint]; found {
-		log.Println("[Create] INFO Volume is already in known mounts: " + mountpoint)
+		log.Println("[Create] INFO volume is already in known mounts: " + mountpoint)
 		return dkvolume.Response{}
 	}
 
 	// Create RBD image if not exists
 	if exists, err := d.imageExists(pool, name); !exists && err == nil {
-		log.Println("[Create] INFO Image does not exists. Creating it now...")
+		log.Println("[Create] INFO image does not exists. Creating it now...")
 		if err = d.createImage(pool, name, d.defFsType, size); err != nil {
 			return dkvolume.Response{Err: err.Error()}
 		}
