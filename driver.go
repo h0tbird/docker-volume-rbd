@@ -25,21 +25,19 @@ import (
 )
 
 //-----------------------------------------------------------------------------
-// Package constant declarations factored into a block:
+// Package constant declarations:
 //-----------------------------------------------------------------------------
 
-const (
-	lockID = "dockerLock"
-)
+const lockID = "dockerLock"
 
 //-----------------------------------------------------------------------------
 // Package variable declarations factored into a block:
 //-----------------------------------------------------------------------------
 
 var (
+	commands  = [...]string{"modprobe", "rbd", "mount", "umount"}
 	nameRegex = regexp.MustCompile(`^(([-_.[:alnum:]]+)/)?([-_.[:alnum:]]+)(@([0-9]+))?$`)
 	lockRegex = regexp.MustCompile(`^(client.[0-9]+) ` + lockID)
-	commands  = [...]string{"rbd", "mount", "umount"}
 )
 
 //-----------------------------------------------------------------------------
@@ -77,8 +75,13 @@ func initDriver(volRoot, defPool, defFsType string, defSize int) rbdDriver {
 	for _, i := range commands {
 		cmd[i], err = exec.LookPath(i)
 		if err != nil {
-			log.Fatal("Make sure binary %s is in your PATH", i)
+			log.Fatal("[Init] ERROR Make sure binary %s is in your PATH", i)
 		}
+	}
+
+	// Load RBD kernel module
+	if err = exec.Command(cmd["modprobe"], "rbd").Run(); err != nil {
+		log.Fatal("[Init] ERROR Unable to load RBD kernel module")
 	}
 
 	// Initialize the struct
@@ -151,7 +154,6 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 //-----------------------------------------------------------------------------
 
 func (d *rbdDriver) Remove(r dkvolume.Request) dkvolume.Response {
-	log.Printf("REMOVE: %s", r.Name)
 	return dkvolume.Response{}
 }
 

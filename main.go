@@ -36,8 +36,8 @@ import (
 //-----------------------------------------------------------------------------
 
 const (
-	id            = "rbd"
-	socketAddress = "/var/run/docker/plugins/rbd.sock"
+	id     = "rbd"
+	socket = "/var/run/docker/plugins/" + id + ".sock"
 )
 
 //-----------------------------------------------------------------------------
@@ -91,10 +91,11 @@ func usage() {
 func main() {
 
 	// Request handler with a driver implementation
+	log.Printf("[Init] INFO Volume root is %s\n", *volRoot)
 	d := initDriver(*volRoot, *defPool, *defFsType, *defSize)
 	h := dkvolume.NewHandler(&d)
 
 	// Listen for requests in a unix socket:
-	log.Printf("Listening on %s\n", socketAddress)
-	fmt.Println(h.ServeUnix("", socketAddress))
+	log.Printf("[Init] INFO Listening on %s\n", socket)
+	fmt.Println(h.ServeUnix("", socket))
 }
