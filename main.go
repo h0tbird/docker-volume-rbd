@@ -69,6 +69,9 @@ func init() {
 		usage()
 	}
 
+	// Change the flags on the default logger:
+	log.SetFlags(log.LstdFlags | log.Lshortfile)
+
 	// Parse commandline flags:
 	flag.Usage = usage
 	flag.Parse()

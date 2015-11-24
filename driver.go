@@ -431,8 +431,8 @@ func (d *rbdDriver) lockImage(pool, name, lockID string) (string, error) {
 
 	// Lock the image
 	err := exec.Command(
-		d.cmd["rbd"], "lock add",
-		"--pool", pool,
+		d.cmd["rbd"], "lock",
+		"add", "--pool", pool,
 		name, lockID,
 	).Run()
 
@@ -442,7 +442,7 @@ func (d *rbdDriver) lockImage(pool, name, lockID string) (string, error) {
 
 	// List the locks
 	out, err := exec.Command(
-		d.cmd["rbd"], "lock list",
+		d.cmd["rbd"], "lock", "list",
 		"--pool", pool, name,
 	).Output()
 
@@ -472,7 +472,7 @@ func (d *rbdDriver) unlockImage(pool, name, lockID, locker string) error {
 
 	// Unlock the image
 	err := exec.Command(
-		d.cmd["rbd"], "lock remove",
+		d.cmd["rbd"], "lock", "remove",
 		name, lockID, locker,
 	).Run()
 
