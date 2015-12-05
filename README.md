@@ -48,7 +48,6 @@ core@core-1 ~ $ cat /opt/bin/rbd
 docker run -i --rm \
 --privileged \
 --pid host \
---name rbd \
 --net host \
 --volume /dev:/dev \
 --volume /sys:/sys \
