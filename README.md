@@ -91,6 +91,10 @@ osrelease="${machinepath}/etc/os-release"
   --bind=/etc/ceph:/etc/ceph \
   --bind=/var/lib/ceph:/var/lib/ceph \
   --user="${CEPH_USER}" \
-  $(basename $0) "$@"
+  --setenv=CMD="$(basename $0)" \
+  --setenv=ARG="$*" \
+  /bin/bash -c '\
+  mount -o remount,rw -t sysfs sysfs /sys; \
+  $CMD $ARG'
 }
 ```
