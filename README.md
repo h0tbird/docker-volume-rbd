@@ -40,8 +40,10 @@ core@core-1 ~ $ sudo ./docker-volume-rbd
 ```
 
 ##### CoreOS
-If you are a CoreOS user (like me) you must provide a way to run the `rbd` command.
-I have my Ceph config in `/etc/ceph` so I can do this:
+If you are a CoreOS user (like me) you must provide a way to run the `rbd` command.  
+I have my Ceph config in `/etc/ceph` and `/var/lib/ceph` (on the host) so I can do this:
+
+###### With `docker`:
 ```
 core@core-1 ~ $ cat /opt/bin/rbd
 #!/bin/bash
@@ -52,5 +54,42 @@ docker run -i --rm \
 --volume /dev:/dev \
 --volume /sys:/sys \
 --volume /etc/ceph:/etc/ceph \
-ceph/base rbd $@
+--volume /var/lib/ceph:/var/lib/ceph \
+h0tbird/ceph:v9.2.0-2 rbd "$@"
+```
+
+###### With `systemd-nspawn`:
+```
+core@core-1 ~ $ cat /opt/bin/rbd
+#!/bin/bash
+
+readonly CEPH_DOCKER_IMAGE=regi01:5000/h0tbird/ceph
+readonly CEPH_DOCKER_TAG=v9.2.0-2
+readonly CEPH_USER=root
+
+machinename=$(echo "${CEPH_DOCKER_IMAGE}-${CEPH_DOCKER_TAG}" | sed -r 's/[^a-zA-Z0-9_.-]/_/g')
+machinepath="/var/lib/toolbox/${machinename}"
+osrelease="${machinepath}/etc/os-release"
+
+[ -f ${osrelease} ] || {
+  sudo mkdir -p "${machinepath}"
+  sudo chown ${USER}: "${machinepath}"
+  docker pull "${CEPH_DOCKER_IMAGE}:${CEPH_DOCKER_TAG}"
+  docker run --name=${machinename} "${CEPH_DOCKER_IMAGE}:${CEPH_DOCKER_TAG}" /bin/true
+  docker export ${machinename} | sudo tar -x -C "${machinepath}" -f -
+  docker rm ${machinename}
+  sudo touch ${osrelease}
+}
+
+[ "$1" == 'dryrun' ] || {
+  sudo systemd-nspawn \
+  --quiet \
+  --directory="${machinepath}" \
+  --capability=all \
+  --share-system \
+  --bind=/etc/ceph:/etc/ceph \
+  --bind=/var/lib/ceph:/var/lib/ceph \
+  --user="${CEPH_USER}" \
+  $(basename $0) "$@"
+}
 ```
