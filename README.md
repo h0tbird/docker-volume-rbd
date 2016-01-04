@@ -87,6 +87,7 @@ osrelease="${machinepath}/etc/os-release"
   --directory="${machinepath}" \
   --capability=all \
   --share-system \
+  --bind=/dev:/dev \
   --bind=/etc/ceph:/etc/ceph \
   --bind=/var/lib/ceph:/var/lib/ceph \
   --user="${CEPH_USER}" \
