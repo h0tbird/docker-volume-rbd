@@ -63,7 +63,7 @@ h0tbird/ceph:v9.2.0-2 $(basename $0) "$@"
 core@core-1 ~ $ cat /opt/bin/rbd
 #!/bin/bash
 
-readonly CEPH_DOCKER_IMAGE=regi01:5000/h0tbird/ceph
+readonly CEPH_DOCKER_IMAGE=h0tbird/ceph
 readonly CEPH_DOCKER_TAG=v9.2.0-2
 readonly CEPH_USER=root
 
