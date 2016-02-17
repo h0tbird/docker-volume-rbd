@@ -1,4 +1,7 @@
 # docker-volume-rbd
+
+[![Build Status](https://travis-ci.org/h0tbird/docker-volume-rbd.svg?branch=master)](https://travis-ci.org/h0tbird/docker-volume-rbd)
+
 A Docker volume driver for RBD
 
 ##### Sample
