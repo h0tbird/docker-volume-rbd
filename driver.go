@@ -99,7 +99,7 @@ func initDriver(volRoot, defPool, defFsType string, defSize int) rbdDriver {
 }
 
 //-----------------------------------------------------------------------------
-// POST /VolumeDriver.Create
+// /VolumeDriver.Create
 //
 // Request:
 //
@@ -153,7 +153,7 @@ func (d *rbdDriver) Create(r dkvolume.Request) dkvolume.Response {
 }
 
 //-----------------------------------------------------------------------------
-// POST /VolumeDriver.Remove
+// /VolumeDriver.Remove
 //
 // Request:
 //
@@ -178,7 +178,7 @@ func (d *rbdDriver) Remove(r dkvolume.Request) dkvolume.Response {
 }
 
 //-----------------------------------------------------------------------------
-// POST /VolumeDriver.Path
+// /VolumeDriver.Path
 //
 // Request:
 //
@@ -213,7 +213,7 @@ func (d *rbdDriver) Path(r dkvolume.Request) dkvolume.Response {
 }
 
 //-----------------------------------------------------------------------------
-// POST /VolumeDriver.Mount
+// /VolumeDriver.Mount
 //
 // Request:
 //
@@ -297,7 +297,7 @@ func (d *rbdDriver) Mount(r dkvolume.Request) dkvolume.Response {
 }
 
 //-----------------------------------------------------------------------------
-// POST /VolumeDriver.Unmount
+// /VolumeDriver.Unmount
 //
 // Request:
 //
@@ -359,6 +359,62 @@ func (d *rbdDriver) Unmount(r dkvolume.Request) dkvolume.Response {
 
 	// Forget the volume
 	delete(d.volumes, mountpoint)
+	return dkvolume.Response{}
+}
+
+//-----------------------------------------------------------------------------
+// /VolumeDriver.Get
+//
+// Request:
+//
+//  {
+//     "Name": "volume_name"
+//  }
+//
+//  Get the volume info.
+//
+// Response:
+//
+//  {
+//     "Volume": {
+//       "Name": "volume_name",
+//       "Mountpoint": "/path/to/directory/on/host",
+//     },
+//     "Err": ""
+//  }
+//
+//  Respond with a string error if an error occurred.
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) Get(r dkvolume.Request) dkvolume.Response {
+	return dkvolume.Response{}
+}
+
+//-----------------------------------------------------------------------------
+// /VolumeDriver.List
+//
+// Request:
+//
+//  {}
+//
+//  Get the list of volumes registered with the plugin.
+//
+// Response:
+//
+//  {
+//     "Volumes": [
+//       {
+//         "Name": "volume_name",
+//         "Mountpoint": "/path/to/directory/on/host"
+//       }
+//     ],
+//     "Err": ""
+//  }
+//
+//  Respond with a string error if an error occurred.
+//-----------------------------------------------------------------------------
+
+func (d *rbdDriver) List(r dkvolume.Request) dkvolume.Response {
 	return dkvolume.Response{}
 }
 
