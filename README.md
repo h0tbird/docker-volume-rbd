@@ -42,11 +42,11 @@ core@core-1 ~ $ sudo ./docker-volume-rbd
 2015/09/29 13:52:49 [Unmount] INFO unlocking image foo
 ```
 
-##### CoreOS
+#### CoreOS
 If you are a CoreOS user (like me) you must provide a way to run the `rbd` command.  
 I have my Ceph config in `/etc/ceph` and `/var/lib/ceph` (on the host) so I can do this:
 
-###### With `docker` (0.427s, concurrent, chicken/egg dilemma):
+##### With `docker` (0.427s, concurrent, chicken/egg dilemma):
 ```
 core@core-1 ~ $ cat /opt/bin/rbd
 #!/bin/bash
@@ -62,7 +62,7 @@ docker run -i --rm \
 h0tbird/ceph:v9.2.0-2 "$@"
 ```
 
-###### With `rkt fly` (0.268s, concurrent, chicken/egg friendly):
+##### With `rkt fly` (0.268s, concurrent, chicken/egg friendly):
 ```
 core@core-1 ~ $ cat /opt/bin/ceph
 #!/bin/bash
@@ -73,10 +73,10 @@ sudo rkt run \
 --stage1-name=coreos.com/rkt/stage1-fly \
 --volume volume-etc-ceph,kind=host,source=/etc/ceph \
 --volume volume-var-lib-ceph,kind=host,source=/var/lib/ceph docker://h0tbird/ceph:v9.2.0-2 \
---exec /usr/bin/$(basename $0) -- "$@"
+--exec /usr/bin/$(basename $0) -- "$@" 2>/dev/null
 ```
 
-###### With `systemd-nspawn` (0.248s, nonconcurrent, chicken/egg friendly):
+##### With `systemd-nspawn` (0.248s, nonconcurrent, chicken/egg friendly):
 ```
 core@core-1 ~ $ cat /opt/bin/rbd
 #!/bin/bash
