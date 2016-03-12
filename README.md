@@ -62,15 +62,15 @@ docker run -i --rm \
 h0tbird/ceph:v9.2.0-2 "$@"
 ```
 
-###### With `rkt fly` (3s, concurrent, chicken/egg friendly):
+###### With `rkt fly` (2.757s, concurrent, chicken/egg friendly):
 ```
 core@core-1 ~ $ cat /opt/bin/ceph
 #!/bin/bash
 sudo rkt run \
---stage1-path=/usr/share/rkt/stage1-fly.aci \
 --interactive \
 --net=host \
 --insecure-options=image \
+--stage1-name=coreos.com/rkt/stage1-fly \
 --volume volume-etc-ceph,kind=host,source=/etc/ceph \
 --volume volume-var-lib-ceph,kind=host,source=/var/lib/ceph docker://h0tbird/ceph:v9.2.0-2 \
 --exec /usr/bin/$(basename $0) -- "$@"
