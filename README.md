@@ -46,7 +46,7 @@ core@core-1 ~ $ sudo ./docker-volume-rbd
 If you are a CoreOS user (like me) you must provide a way to run the `rbd` command.  
 I have my Ceph config in `/etc/ceph` and `/var/lib/ceph` (on the host) so I can do this:
 
-###### With `docker` (0.427s (/) concurrent (/), chicken/egg (x)):
+###### With `docker` (0.427s, concurrent, chicken/egg dilemma):
 ```
 core@core-1 ~ $ cat /opt/bin/rbd
 #!/bin/bash
@@ -62,7 +62,7 @@ docker run -i --rm \
 h0tbird/ceph:v9.2.0-2 "$@"
 ```
 
-###### With `rkt fly` (3s (x), concurrent (/), chicken/egg (/)):
+###### With `rkt fly` (3s, concurrent, chicken/egg friendly):
 ```
 core@core-1 ~ $ cat /opt/bin/ceph
 #!/bin/bash
@@ -76,7 +76,7 @@ sudo rkt run \
 --exec /usr/bin/$(basename $0) -- "$@"
 ```
 
-###### With `systemd-nspawn` (0.248s (/), nonconcurrent (x), chicken/egg (/)):
+###### With `systemd-nspawn` (0.248s, nonconcurrent, chicken/egg friendly):
 ```
 core@core-1 ~ $ cat /opt/bin/rbd
 #!/bin/bash
